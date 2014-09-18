@@ -1,0 +1,229 @@
+---
+title: "Practical Machine Learning: Project 1"
+output: html_document
+---
+
+## Project Description
+
+Participants in a study were asked to perform various weight lifting exercises while wearing accelerometers (including accelerometers on the weights).  The data was used to try to predict if the exercises where done correctly.  A full description of the test can be found here: http://groupware.les.inf.puc-rio.br/har.  
+
+For this project, we were provided two sets of data collected from accelerometers worn by participants (and on the weights) while they performed a barbell lift. They were instructed how to do it correctly, and also how to do it incorrectly in 5 different ways. 
+
+Using this data, this project attempts to predict whether the exercise was done correctly, or incorrectly in one of 5 different ways. 
+
+## Executive Summary
+
+Using a Random Forest classification algorithm, it was possible to achieve an estimated 1.5% out of sample error rate with a Kappa value of .98 indicating a very well fitting model. The original data set was reduced from 160 to 53 variables of interest for the model.
+
+When the model was applied against the provided Testing data set it produced a perfect 20 out of 20 correct predictions. 
+
+## Data Analysis and Grooming
+
+Two sets of accelerometer readings data were provided. The first was a training set was 19,622 observations of 160 variables, including a variable indicating if the exercise was done correctly or if incorrect which of the incorrect methods occurred. The second set was 20 observations of the same 160 variables, but the variable indicating correct or incorrect technique was replaced with a dummy variable. 
+
+Upon observation of the Training data, it was noted that there were many variables which were empty or had values of NA for all observations.  These variables were removed from the Training data and the same variables removed from the Testing data. In addition, the first seven variables of both data sets contained data which was not relevant to the algorithm and these variables were also removed. They were the observation number, user name, raw time 1, raw time 2, converted time, and two variables relating to window information.
+
+This left 53 variable in both data sets. Using the Training data, the variables were tested for Near Zero Covariates. None were found.  No further transformation or manipulation of the data took place. Results of the test are provided below.
+
+
+```{r, eval=FALSE}
+nsv <- nearZeroVar(training, saveMetrics=T)
+nsv
+```
+
+```
+                     freqRatio percentUnique zeroVar  
+roll_belt             1.101904     6.7781062   FALSE  
+pitch_belt            1.036082     9.3772296   FALSE  
+yaw_belt              1.058480     9.9734991   FALSE  
+total_accel_belt      1.063160     0.1477933   FALSE  
+gyros_belt_x          1.058651     0.7134849   FALSE  
+gyros_belt_y          1.144000     0.3516461   FALSE  
+gyros_belt_z          1.066214     0.8612782   FALSE  
+accel_belt_x          1.055412     0.8357966   FALSE  
+accel_belt_y          1.113725     0.7287738   FALSE  
+accel_belt_z          1.078767     1.5237998   FALSE  
+magnet_belt_x         1.090141     1.6664968   FALSE  
+magnet_belt_y         1.099688     1.5187035   FALSE  
+magnet_belt_z         1.006369     2.3290184   FALSE  
+roll_arm             52.338462    13.5256345   FALSE  
+pitch_arm            87.256410    15.7323412   FALSE  
+yaw_arm              33.029126    14.6570176   FALSE  
+total_accel_arm       1.024526     0.3363572   FALSE  
+gyros_arm_x           1.015504     3.2769341   FALSE  
+gyros_arm_y           1.454369     1.9162165   FALSE  
+gyros_arm_z           1.110687     1.2638875   FALSE  
+accel_arm_x           1.017341     3.9598410   FALSE  
+accel_arm_y           1.140187     2.7367241   FALSE  
+accel_arm_z           1.128000     4.0362858   FALSE  
+magnet_arm_x          1.000000     6.8239731   FALSE  
+magnet_arm_y          1.056818     4.4439914   FALSE  
+magnet_arm_z          1.036364     6.4468454   FALSE  
+roll_dumbbell         1.022388    84.2065029   FALSE  
+pitch_dumbbell        2.277372    81.7449801   FALSE  
+yaw_dumbbell          1.132231    83.4828254   FALSE  
+total_accel_dumbbell  1.072634     0.2191418   FALSE  
+gyros_dumbbell_x      1.003268     1.2282132   FALSE  
+gyros_dumbbell_y      1.264957     1.4167771   FALSE  
+gyros_dumbbell_z      1.060100     1.0498420   FALSE  
+accel_dumbbell_x      1.018018     2.1659362   FALSE  
+accel_dumbbell_y      1.053061     2.3748853   FALSE  
+accel_dumbbell_z      1.133333     2.0894914   FALSE  
+magnet_dumbbell_x     1.098266     5.7486495   FALSE  
+magnet_dumbbell_y     1.197740     4.3012945   FALSE  
+magnet_dumbbell_z     1.020833     3.4451126   FALSE  
+roll_forearm         11.589286    11.0895933   FALSE  
+pitch_forearm        65.983051    14.8557741   FALSE  
+yaw_forearm          15.322835    10.1467740   FALSE  
+total_accel_forearm   1.128928     0.3567424   FALSE  
+gyros_forearm_x       1.059273     1.5187035   FALSE  
+gyros_forearm_y       1.036554     3.7763735   FALSE  
+gyros_forearm_z       1.122917     1.5645704   FALSE  
+accel_forearm_x       1.126437     4.0464784   FALSE  
+accel_forearm_y       1.059406     5.1116094   FALSE  
+accel_forearm_z       1.006250     2.9558659   FALSE  
+magnet_forearm_x      1.012346     7.7667924   FALSE  
+magnet_forearm_y      1.246914     9.5403119   FALSE  
+magnet_forearm_z      1.000000     8.5771073   FALSE  
+classe                1.469581     0.0254816   FALSE  
+```
+
+## Model Selection and Fit Analysis
+
+The Training data set was partitioned into a training set (train_1) and testing set (train_2), with 60% in the training set and 40% in the testing set.
+
+```{r, eval=FALSE}
+set.seed(73821)
+inTrain<-createDataPartition(training$classe, p=.6, list=F)
+train_1 <- training[inTrain,]
+train_2 <- training[-inTrain,]
+```
+
+The train_1 data was used to build a Random Forest model with the number of trees limited to 50 to improve the run time. This model was chosen because of the non-linear relationship between the variables and the accuracy of these types of models.
+
+```{r, eval=F}
+modFit <- train(classe ~., data=train_1, method="rf", ntree=50, prox=TRUE)
+```
+
+The resulting model (modFit) provided an accuracy of 98.5% with an Kappa of .981. The model results were:
+
+```{r, eval=F}
+modFit
+```
+
+```
+Random Forest  
+
+11776 samples  
+   52 predictor  
+    5 classes: 'A', 'B', 'C', 'D', 'E'   
+  
+No pre-processing  
+Resampling: Bootstrapped (25 reps)   
+  
+Summary of sample sizes: 11776, 11776, 11776, 11776, 11776, 11776, ...   
+  
+Resampling results across tuning parameters:  
+  
+  mtry  Accuracy  Kappa  Accuracy SD  Kappa SD  
+   2    0.983     0.979  0.00199      0.00251   
+  27    0.985     0.981  0.00252      0.00319   
+  52    0.978     0.973  0.00359      0.00454   
+  
+Accuracy was used to select the optimal model using  the largest value.  
+The final value used for the model was mtry = 27.   
+```
+  
+The variable importance was then checked to see if any could be removed from the model. The importance begins to drop off after the first XX variables as seen using the varImp function, but it was decided to keep all variables. 
+ 
+```{r, eval=FALSE}
+varImp(modFit)
+```
+
+```
+only 20 most important variables shown (out of 52)  
+  
+                     Overall  
+roll_belt            100.000  
+pitch_forearm         59.115  
+yaw_belt              53.461  
+magnet_dumbbell_z     47.532  
+magnet_dumbbell_y     45.956  
+pitch_belt            45.737  
+roll_forearm          44.018  
+accel_dumbbell_y      22.991  
+roll_dumbbell         19.280  
+accel_forearm_x       18.622  
+magnet_belt_z         16.894  
+magnet_dumbbell_x     15.624  
+total_accel_dumbbell  14.300  
+magnet_forearm_z      14.246  
+magnet_belt_y         14.240  
+accel_dumbbell_z      14.193  
+accel_belt_z          13.410  
+gyros_belt_z          13.036  
+yaw_arm               10.787  
+magnet_belt_x          9.835  
+```
+
+The train_2 data, which was the 40% partition from the original Training, was then used to estimate the out of sample error of the model. The confusionMatix indicates a very good fit with an accuracy of 99% and a 95% confidence interval for the accuracy of [0.989, 0.993].
+
+```{r, eval=FALSE}
+pred_train <- predict(modFit, train_2)
+confusionMatrix(pred_train, train_2$classe)
+```
+
+```
+Confusion Matrix and Statistics  
+  
+          Reference  
+Prediction    A    B    C    D    E  
+         A 2231   12    0    0    0  
+         B    1 1495    9    0    1  
+         C    0   11 1356   27    0  
+         D    0    0    3 1258    4  
+         E    0    0    0    1 1437  
+  
+Overall Statistics  
+                                          
+               Accuracy : 0.9912          
+                 95% CI : (0.9889, 0.9932)  
+    No Information Rate : 0.2845            
+    P-Value [Acc > NIR] : < 2.2e-16         
+                                          
+                  Kappa : 0.9889          
+ Mcnemar's Test P-Value : NA              
+  
+Statistics by Class:  
+  
+                     Class: A Class: B Class: C Class: D Class: E  
+Sensitivity            0.9996   0.9848   0.9912   0.9782   0.9965  
+Specificity            0.9979   0.9983   0.9941   0.9989   0.9998  
+Pos Pred Value         0.9947   0.9927   0.9727   0.9945   0.9993  
+Neg Pred Value         0.9998   0.9964   0.9981   0.9957   0.9992  
+Prevalence             0.2845   0.1935   0.1744   0.1639   0.1838  
+Detection Rate         0.2843   0.1905   0.1728   0.1603   0.1832  
+Detection Prevalence   0.2859   0.1919   0.1777   0.1612   0.1833  
+Balanced Accuracy      0.9987   0.9916   0.9927   0.9886   0.9982  
+```
+
+## Predictions against testing data
+
+Using the model described above, the weight lifting correct/incorrectness was predicting for the 20 observations in the test set. The predicted results were
+
+```{r, eval=FALSE}
+pred_testing <-predict(modFit, testing)
+pred_testing
+```
+
+```
+[1] B A B A A E D B A A B C B A E E A B B B  
+Levels: A B C D E  
+```
+
+When these values were submitted for project results, all 20 of the 20 were evaluated as correct.
+
+## Conclusion
+
+Given accelerometer data from a barbell lifting exercise being performed, it is possible to accurate determine if the exercise was performed correctly, and if not correct, in which way was it incorrect. It is expected that the same success could likely be expected from other weight lifting exercises, however it was not tested using this model. 
+
